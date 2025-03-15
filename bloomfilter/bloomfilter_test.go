@@ -2,6 +2,7 @@ package bloomfilter
 
 import (
 	"fmt"
+	"sync"
 	"testing"
 )
 
@@ -41,6 +42,40 @@ func TestFalsePositiveRate(t *testing.T) {
 }
 
 
+func TestResize(t *testing.T) {
+	bf := NewBloomFilter(100, 0.01)
+
+	for i := 0; i < 200; i++ {
+		bf.Add([]byte(fmt.Sprintf("element-%d", i)))
+	}
+
+	// Verify Bloom filter has resized
+	if bf.size <= 100 {
+		t.Errorf("Expected Bloom filter to resize, but size remained %d", bf.size)
+	}
+}
+
+
+func TestConcurrentInserts(t *testing.T) {
+	bf := NewBloomFilter(1000, 0.01)
+	var wg sync.WaitGroup
+
+	// Simulate 100 concurrent inserts
+	for i := 0; i < 100; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			bf.Add([]byte(fmt.Sprintf("item-%d", i)))
+		}(i)
+	}
+	wg.Wait()
+
+	if !bf.Exists([]byte("item-50")) {
+		t.Errorf("Expected 'item-50' to exist in Bloom Filter")
+	}
+}
+
+
 func BenchmarkBloomFilter_Add(b *testing.B) {
 	bf := NewBloomFilter(1000, 0.01)
 
@@ -59,3 +94,29 @@ func BenchmarkBloomFilter_Exists(b *testing.B) {
 		_ = bf.Exists([]byte("test"))
 	}
 }
+
+// Benchmark Insert Speed
+func BenchmarkBloomFilter_Insert(b *testing.B) {
+	bf := NewBloomFilter(10000, 0.01)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		bf.Add([]byte(fmt.Sprintf("item-%d", i)))
+	}
+}
+
+// Benchmark Lookup Speed (Checking Existing Items)
+func BenchmarkBloomFilter_Lookup(b *testing.B) {
+	bf := NewBloomFilter(10000, 0.01)
+
+	// Preload Bloom filter
+	for i := 0; i < 10000; i++ {
+		bf.Add([]byte(fmt.Sprintf("item-%d", i)))
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = bf.Exists([]byte(fmt.Sprintf("item-%d", i%10000)))
+	}
+}
+
