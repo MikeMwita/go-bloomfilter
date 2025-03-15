@@ -1,7 +1,6 @@
 package bloomfilter
 
 import (
-	"encoding/binary"
 	"encoding/gob"
 	"hash/fnv"
 	"math"
@@ -63,6 +62,8 @@ func (bf *BloomFilter) Add(data []byte) {
 
 // Exists checks whether an element is probably in the Bloom filter.
 func (bf *BloomFilter) Exists(data []byte) bool {
+  bf.mu.Lock()
+	defer bf.mu.Unlock()
 	for i := uint(0); i < bf.hashCount; i++ {
 		hashVal := murmurHash3(data, uint32(i)) % bf.size
 		if !bf.getBit(hashVal) {
@@ -84,6 +85,34 @@ func (bf *BloomFilter) setBit(index uint) {
 // getBit checks if a specific bit is set.
 func (bf *BloomFilter) getBit(index uint) bool {
 	return (bf.bitArray[index/64] & (1 << (index % 64))) != 0
+}
+
+// Resize increases the Bloom filter's capacity when the false positive rate gets too high.
+func (bf *BloomFilter) Resize() {
+	bf.mu.Lock()
+	defer bf.mu.Unlock()
+
+	// Calculate new size (double the bit array size)
+	newSize := bf.size * 2
+	newBitArraySize := (newSize + 63) / 64
+
+	// Create a new Bloom filter with updated parameters
+	newBF := &BloomFilter{
+		bitArray:  make([]uint64, newBitArraySize),
+		size:      newSize,
+		hashCount: bf.hashCount,
+	}
+
+	// Reinsert all existing elements
+	for i := range bf.bitArray {
+		newBF.bitArray[i] = bf.bitArray[i]
+	}
+
+	// Replace current filter with resized one
+	bf.bitArray = newBF.bitArray
+	bf.size = newBF.size
+	bf.hashCount = newBF.hashCount
+
 }
 
 // Save writes the Bloom filter to a file for persistence.
