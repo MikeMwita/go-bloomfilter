@@ -40,15 +40,15 @@ func murmurHash3(data []byte, seed uint32) uint {
 	hash.Write(data)
 	sum := hash.Sum32() ^ seed
 
-	if len(data) >= 4 {
-		extra := binary.BigEndian.Uint32(data[:4])
-		sum ^= extra
-		sum *= 0x5bd1e995 // MurmurHash3 mixing constant
-		sum ^= sum >> 24
-	}
+	sum ^= sum >> 16
+	sum *= 0x85ebca6b
+	sum ^= sum >> 13
+	sum *= 0xc2b2ae35
+	sum ^= sum >> 16
 
 	return uint(sum) % math.MaxUint32
 }
+
 
 // Add inserts an element into the Bloom filter by setting bits at multiple positions.
 func (bf *BloomFilter) Add(data []byte) {
@@ -74,6 +74,10 @@ func (bf *BloomFilter) Exists(data []byte) bool {
 
 // setBit sets a specific bit in the bit array.
 func (bf *BloomFilter) setBit(index uint) {
+	if index/64 >= uint(len(bf.bitArray)) {
+		return // Ignore out-of-bounds bits
+	}
+
 	bf.bitArray[index/64] |= 1 << (index % 64)
 }
 
